@@ -26,13 +26,14 @@ Almost rebased so
 - Initial compatibility with changes in boot sound behavior caused by Windows version changes (to be improved)
 ## KnownIssues
 
-- On Windows Vista and later systems, the boot sound effect requires modifying imageres.dll and is not integrated into the current version.We use the logon sound effect instead.
+- On Windows Vista and later systems, the boot sound effect requires modifying imageres.dll we use the logon sound effect instead. And we patch imageres.dll only on Windows 8 and later systems.
 - On Windows 8 and later systems, Windows has removed the shutdown/logon/logoff sound effect, so the shutdown sound effect customization will not work.
 - On very old computers, performance may be SIGNIFICANTLY degraded or settings may not be successful due to large image resolutions.
 
 ## Credits
 
 - [richgel999(Rich Geldreich)](https://github.com/richgel999/) for his [miniz](https://github.com/richgel999/miniz)
+- [ORelio](https://github.com/ORelio/) for his [Sound-Manager](https://github.com/ORelio/Sound-Manager)
 
 ## License
 

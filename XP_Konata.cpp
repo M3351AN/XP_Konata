@@ -1,21 +1,34 @@
 ﻿// Copyright (c) 2025 渟雲. All rights reserved.
 #include "pch.h"
+
 #include "./resource.h"
+
+// fix VC6 build
+#ifndef INVALID_FILE_ATTRIBUTES
+#define INVALID_FILE_ATTRIBUTES ((DWORD) - 1)
+#endif
+#ifndef REPLACEFILE_WRITE_THROUGH
+#define REPLACEFILE_WRITE_THROUGH 0x00000002
+#endif
 
 #pragma comment(lib, "winmm.lib")
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "oleaut32.lib")
 
-const char kAppTitle[] = "XP Konata";
-const char kClassName[] = "KonataWnd";
-const char kAppDir[] = "C:\\XP_Konata";
-const char kBackupIni[] = "C:\\XP_Konata\\backup.ini";
+static const char kAppTitle[] = "XP Konata";
+static const char kClassName[] = "KonataWnd";
+static const char kAppDir[] = "C:\\XP_Konata";
+static const char kBackupIni[] = "C:\\XP_Konata\\backup.ini";
+static const char kImageresBackup[] = "C:\\XP_Konata\\imageres.dll.backup";
 
-const char kWallpaperKey[] = "Control Panel\\Desktop";
-const char kAppEventsKey[] = "AppEvents\\Schemes\\Apps\\.Default\\";
+static const char kWallpaperKey[] = "Control Panel\\Desktop";
+static const char kAppEventsKey[] = "AppEvents\\Schemes\\Apps\\.Default\\";
 
-const char kResourcePack[] = "resources.pak";
-const char kPackSignature[] = "KONATA_PAK_v1";
+static const char kResourcePack[] = "resources.pak";
+static const char kPackSignature[] = "KONATA_PAK_v1";
+
+static const DWORD kWaveResourceNumber = 5080;
+static const USHORT kWaveLocaleNumber = 1033;
 
 #pragma pack(push, 1)
 typedef struct {
@@ -42,17 +55,43 @@ static char g_shutdown_path[MAX_PATH];
 static char g_deep1_path[MAX_PATH];
 static char g_deep2_path[MAX_PATH];
 static char g_deep3_path[MAX_PATH];
-
-static DWORD g_windows_version = 0;
+// is using float for version number a bad idea?
+// but lazy.
+static float g_windows_version = 0;
 
 static HBITMAP g_bmp = NULL;
 
-static void EnsureWinVer() {
-  OSVERSIONINFO vi = {0};
+typedef LONG(WINAPI* RtlGetVersionPtr)(OSVERSIONINFOEXW*);
+static float GetWindowsVersion() {
+  OSVERSIONINFOEXW osvi;
+  ZeroMemory(&osvi, sizeof(osvi));
+  osvi.dwOSVersionInfoSize = sizeof(osvi);
+
+  HMODULE hMod = GetModuleHandleA("ntdll.dll");
+  if (hMod) {
+    RtlGetVersionPtr pRtlGetVersion =
+        (RtlGetVersionPtr)GetProcAddress(hMod, "RtlGetVersion");
+    if (pRtlGetVersion) {
+      if (pRtlGetVersion(&osvi) == 0) {
+        return static_cast<float>(osvi.dwMajorVersion) +
+               static_cast<float>(osvi.dwMinorVersion / 10.0f);
+      }
+    }
+  }
+
+  // fallback to GetVersionEx if RtlGetVersion is not available
+  OSVERSIONINFOA vi;
+  ZeroMemory(&vi, sizeof(vi));
   vi.dwOSVersionInfoSize = sizeof(vi);
-  GetVersionEx(&vi);
-  g_windows_version = vi.dwMajorVersion;
+  if (GetVersionExA(&vi)) {
+    return static_cast<float>(vi.dwMajorVersion) +
+           static_cast<float>(vi.dwMinorVersion / 10.0f);
+  }
+
+  return 20;  // should never reach here
 }
+
+static void EnsureWinVer() { g_windows_version = GetWindowsVersion(); }
 
 static void EnsureAppDir() { CreateDirectoryA(kAppDir, NULL); }
 
@@ -183,6 +222,372 @@ static void ApplyWallpaper(const char* bmp_path) {
   BroadcastSettings("Control Panel\\Desktop");
 }
 
+typedef BOOL(WINAPI* LPFN_Wow64DisableWow64FsRedirection)(PVOID*);
+typedef BOOL(WINAPI* LPFN_Wow64RevertWow64FsRedirection)(PVOID);
+
+static void* DisableFsRedirection() {
+  HMODULE hKernel = GetModuleHandleA("kernel32.dll");
+  if (!hKernel) return NULL;
+  LPFN_Wow64DisableWow64FsRedirection pDisable =
+      (LPFN_Wow64DisableWow64FsRedirection)GetProcAddress(
+          hKernel, "Wow64DisableWow64FsRedirection");
+  if (!pDisable) return NULL;
+  PVOID oldValue = NULL;
+  if (pDisable(&oldValue)) return oldValue;
+  return NULL;
+}
+
+static void RevertFsRedirection(void* oldValue) {
+  if (!oldValue) return;
+  HMODULE hKernel = GetModuleHandleA("kernel32.dll");
+  if (!hKernel) return;
+  LPFN_Wow64RevertWow64FsRedirection pRevert =
+      (LPFN_Wow64RevertWow64FsRedirection)GetProcAddress(
+          hKernel, "Wow64RevertWow64FsRedirection");
+  if (pRevert) pRevert(oldValue);
+}
+
+static bool BuildSystem32Path(char* out, DWORD cch, const char* fileName) {
+  void* oldValue = DisableFsRedirection();
+
+  char winDir[MAX_PATH];
+  if (GetWindowsDirectoryA(winDir, MAX_PATH) == 0) {
+    RevertFsRedirection(oldValue);
+    return false;
+  }
+
+  lstrcpynA(out, winDir, cch);
+  lstrcatA(out, "\\System32\\");
+  lstrcatA(out, fileName);
+
+  RevertFsRedirection(oldValue);
+  return true;
+}
+
+static bool GetImageresPath(char* path, DWORD size) {
+  return BuildSystem32Path(path, size, "imageres.dll");
+}
+
+static bool BackupImageresDll() {
+  void* oldValue = DisableFsRedirection();
+  char imageresPath[MAX_PATH];
+  if (!GetImageresPath(imageresPath, MAX_PATH)) {
+    return false;
+  }
+
+  if (GetFileAttributesA(imageresPath) == INVALID_FILE_ATTRIBUTES) {
+    return false;
+  }
+
+  // if exsits, do not overwrite
+  if (GetFileAttributesA(kImageresBackup) != INVALID_FILE_ATTRIBUTES) {
+    return true;
+  }
+
+  bool ret = (CopyFileA(imageresPath, kImageresBackup, FALSE) != FALSE);
+  // warning C4800:
+  // 'int' : forcing value to bool 'true' or 'false' (performance warning)
+  RevertFsRedirection(oldValue);
+  return ret;
+}
+
+static bool ReplaceWaveResource(const char* dllPath, const char* waveFile) {
+  HMODULE hKernel = GetModuleHandleA("kernel32.dll");
+  if (!hKernel) return false;
+
+  typedef HANDLE(WINAPI * BeginUpdateResourceWFunc)(LPCWSTR, BOOL);
+  typedef BOOL(WINAPI * UpdateResourceWFunc)(HANDLE, LPCWSTR, LPCWSTR, WORD,
+                                             LPVOID, DWORD);
+  typedef BOOL(WINAPI * EndUpdateResourceWFunc)(HANDLE, BOOL);
+
+  BeginUpdateResourceWFunc pBeginUpdateResourceW =
+      (BeginUpdateResourceWFunc)GetProcAddress(hKernel, "BeginUpdateResourceW");
+  UpdateResourceWFunc pUpdateResourceW =
+      (UpdateResourceWFunc)GetProcAddress(hKernel, "UpdateResourceW");
+  EndUpdateResourceWFunc pEndUpdateResourceW =
+      (EndUpdateResourceWFunc)GetProcAddress(hKernel, "EndUpdateResourceW");
+
+  if (!pBeginUpdateResourceW || !pUpdateResourceW || !pEndUpdateResourceW)
+    return false;
+
+  wchar_t wideDllPath[MAX_PATH];
+  if (!MultiByteToWideChar(CP_ACP, 0, dllPath, -1, wideDllPath, MAX_PATH))
+    return false;
+
+  HANDLE hUpdate = pBeginUpdateResourceW(wideDllPath, FALSE);
+  if (!hUpdate) return false;
+
+  HANDLE hFile = CreateFileA(waveFile, GENERIC_READ, FILE_SHARE_READ, NULL,
+                             OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (hFile == INVALID_HANDLE_VALUE) {
+    pEndUpdateResourceW(hUpdate, TRUE);
+    return false;
+  }
+
+  DWORD fileSize = GetFileSize(hFile, NULL);
+  if (fileSize == INVALID_FILE_SIZE || fileSize == 0) {
+    CloseHandle(hFile);
+    pEndUpdateResourceW(hUpdate, TRUE);
+    return false;
+  }
+
+  BYTE* buffer = reinterpret_cast<BYTE*>(malloc(fileSize));
+  if (!buffer) {
+    CloseHandle(hFile);
+    pEndUpdateResourceW(hUpdate, TRUE);
+    return false;
+  }
+
+  DWORD bytesRead = 0;
+  BOOL ok = ReadFile(hFile, buffer, fileSize, &bytesRead, NULL);
+  CloseHandle(hFile);
+  if (!ok || bytesRead != fileSize) {
+    free(buffer);
+    pEndUpdateResourceW(hUpdate, TRUE);
+    return false;
+  }
+
+  BOOL success =
+      pUpdateResourceW(hUpdate, L"WAVE", MAKEINTRESOURCEW(kWaveResourceNumber),
+                       kWaveLocaleNumber, buffer, fileSize);
+
+  free(buffer);
+
+  pEndUpdateResourceW(hUpdate, success ? FALSE : TRUE);
+
+  return success ? true : false;
+}
+
+static BOOL EnablePrivilege(LPCTSTR privName) {
+  HANDLE hToken = NULL;
+  if (!OpenProcessToken(GetCurrentProcess(),
+                        TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken))
+    return FALSE;
+
+  LUID luid;
+  if (!LookupPrivilegeValue(NULL, privName, &luid)) {
+    CloseHandle(hToken);
+    return FALSE;
+  }
+
+  TOKEN_PRIVILEGES tp;
+  tp.PrivilegeCount = 1;
+  tp.Privileges[0].Luid = luid;
+  tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+
+  if (!AdjustTokenPrivileges(hToken, FALSE, &tp, sizeof(tp), NULL, NULL)) {
+    CloseHandle(hToken);
+    return FALSE;
+  }
+  BOOL ok = (GetLastError() == ERROR_SUCCESS);
+  CloseHandle(hToken);
+  return ok;
+}
+
+static PSID GetCurrentUserSid() {
+  HANDLE hToken = NULL;
+  if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) return NULL;
+
+  DWORD dwSize = 0;
+  GetTokenInformation(hToken, TokenUser, NULL, 0, &dwSize);
+  PTOKEN_USER ptu = (PTOKEN_USER)malloc(dwSize);
+  if (!ptu) {
+    CloseHandle(hToken);
+    return NULL;
+  }
+
+  if (!GetTokenInformation(hToken, TokenUser, ptu, dwSize, &dwSize)) {
+    free(ptu);
+    CloseHandle(hToken);
+    return NULL;
+  }
+
+  DWORD sidLen = GetLengthSid(ptu->User.Sid);
+  PSID userSid = (PSID)malloc(sidLen);
+  if (userSid) CopySid(sidLen, userSid, ptu->User.Sid);
+
+  free(ptu);
+  CloseHandle(hToken);
+  return userSid;  // caller must free
+}
+
+static PSID GetAdministratorsSid() {
+  SID_IDENTIFIER_AUTHORITY NtAuth = SECURITY_NT_AUTHORITY;
+  PSID adminSid = NULL;
+  if (AllocateAndInitializeSid(&NtAuth, 2, SECURITY_BUILTIN_DOMAIN_RID,
+                               DOMAIN_ALIAS_RID_ADMINS, 0, 0, 0, 0, 0, 0,
+                               &adminSid))
+    return adminSid;
+  return NULL;
+}
+
+static bool TakeOwnership(const char* filename) {
+  EnablePrivilege(SE_TAKE_OWNERSHIP_NAME);
+  EnablePrivilege(SE_RESTORE_NAME);
+
+  PSID userSid = GetCurrentUserSid();
+  PSID adminSid = GetAdministratorsSid();
+  if (!userSid) return false;
+
+  SECURITY_DESCRIPTOR sdOwner;
+  InitializeSecurityDescriptor(&sdOwner, SECURITY_DESCRIPTOR_REVISION);
+  SetSecurityDescriptorOwner(&sdOwner, userSid, FALSE);
+  if (!SetFileSecurityA(filename, OWNER_SECURITY_INFORMATION, &sdOwner)) {
+    if (adminSid) FreeSid(adminSid);
+    free(userSid);
+    return false;
+  }
+
+  DWORD aclSize = sizeof(ACL) + sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) +
+                  GetLengthSid(userSid);
+  if (adminSid)
+    aclSize +=
+        sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) + GetLengthSid(adminSid);
+
+  PACL pAcl = (PACL)malloc(aclSize);
+  if (!pAcl) {
+    if (adminSid) FreeSid(adminSid);
+    free(userSid);
+    return false;
+  }
+
+  if (!InitializeAcl(pAcl, aclSize, ACL_REVISION)) {
+    free(pAcl);
+    if (adminSid) FreeSid(adminSid);
+    free(userSid);
+    return false;
+  }
+
+  if (!AddAccessAllowedAce(pAcl, ACL_REVISION, FILE_ALL_ACCESS, userSid)) {
+    free(pAcl);
+    if (adminSid) FreeSid(adminSid);
+    free(userSid);
+    return false;
+  }
+
+  if (adminSid) {
+    if (!AddAccessAllowedAce(pAcl, ACL_REVISION, FILE_ALL_ACCESS, adminSid)) {
+      free(pAcl);
+      FreeSid(adminSid);
+      free(userSid);
+      return false;
+    }
+  }
+
+  SECURITY_DESCRIPTOR sdDacl;
+  InitializeSecurityDescriptor(&sdDacl, SECURITY_DESCRIPTOR_REVISION);
+  SetSecurityDescriptorDacl(&sdDacl, TRUE, pAcl, FALSE);
+
+  BOOL ok = SetFileSecurityA(filename, DACL_SECURITY_INFORMATION, &sdDacl);
+
+  free(pAcl);
+  if (adminSid) FreeSid(adminSid);
+  free(userSid);
+
+  return ok ? true : false;
+}
+typedef BOOL(WINAPI* LPFN_ReplaceFileA)(LPCSTR lpReplacedFileName,
+                                        LPCSTR lpReplacementFileName,
+                                        LPCSTR lpBackupFileName,
+                                        DWORD dwReplaceFlags, LPVOID lpExclude,
+                                        LPVOID lpReserved);
+
+static bool PatchStartupSound(const char* waveFile) {
+  if (!waveFile || GetFileAttributesA(waveFile) == INVALID_FILE_ATTRIBUTES) {
+    MessageBoxA(NULL, "无效的 WAV 文件", "错误", MB_ICONERROR);
+    return false;
+  }
+
+  char imageresPath[MAX_PATH];
+  BuildSystem32Path(imageresPath, MAX_PATH, "\\imageres.dll");
+
+  char imageresNew[MAX_PATH];
+  lstrcpynA(imageresNew, kAppDir, MAX_PATH);
+  lstrcatA(imageresNew, "\\imageres.dll.new");
+
+  void* oldRedir = DisableFsRedirection();
+
+  if (!CopyFileA(imageresPath, imageresNew, FALSE)) {
+    return false;
+  }
+
+  if (!ReplaceWaveResource(imageresNew, waveFile)) {
+    RevertFsRedirection(oldRedir);
+    return false;
+  }
+
+  EnablePrivilege(SE_RESTORE_NAME);
+  EnablePrivilege(SE_BACKUP_NAME);
+  if (!TakeOwnership(imageresPath)) {
+    RevertFsRedirection(oldRedir);
+    return false;
+  }
+
+  SetFileAttributesA(imageresPath, FILE_ATTRIBUTE_ARCHIVE);
+  HMODULE hKernel = GetModuleHandleA("kernel32.dll");
+  LPFN_ReplaceFileA pReplaceFileA =
+      (LPFN_ReplaceFileA)GetProcAddress(hKernel, "ReplaceFileA");
+
+  BOOL replaced = pReplaceFileA(imageresPath, imageresNew, NULL,
+                                REPLACEFILE_WRITE_THROUGH, NULL, NULL);
+
+  if (!replaced || !pReplaceFileA) {
+    // fallback to CopyFile (may not take effect)
+    if (!CopyFileA(imageresNew, imageresPath, FALSE)) {
+      RevertFsRedirection(oldRedir);
+      return false;
+    }
+  }
+
+  RevertFsRedirection(oldRedir);
+
+  MessageBoxA(NULL, "imageres.dll patched success", "Success",
+              MB_ICONINFORMATION);
+  return true;
+}
+
+static bool RestoreImageresDll() {
+  void* oldValue = DisableFsRedirection();
+  // if backup not exists, do nothing
+  if (GetFileAttributesA(kImageresBackup) == INVALID_FILE_ATTRIBUTES) {
+    RevertFsRedirection(oldValue);
+    return false;
+  }
+
+  char imageresPath[MAX_PATH];
+  if (!GetImageresPath(imageresPath, MAX_PATH)) {
+    RevertFsRedirection(oldValue);
+    return false;
+  }
+
+  char systemDir[MAX_PATH];
+  if (GetSystemDirectoryA(systemDir, MAX_PATH) == 0) {
+    RevertFsRedirection(oldValue);
+    return false;
+  }
+
+  char imageresOld[MAX_PATH];
+  lstrcpyA(imageresOld, systemDir);
+  lstrcatA(imageresOld, "\\imageres.dll.old");
+
+  if (!TakeOwnership(imageresPath)) {
+    RevertFsRedirection(oldValue);
+    return false;
+  }
+
+  MoveFileExA(imageresPath, imageresOld, MOVEFILE_REPLACE_EXISTING);
+
+  if (CopyFileA(kImageresBackup, imageresPath, FALSE)) {
+    DeleteFileA(kImageresBackup);
+    DeleteFileA(imageresOld);
+    RevertFsRedirection(oldValue);
+    return true;
+  }
+
+  RevertFsRedirection(oldValue);
+  return false;
+}
+
 static void SetSoundEvent(const char* event_name, const char* wav_path) {
   char reg_path[256];
   lstrcpyA(reg_path, kAppEventsKey);
@@ -199,7 +604,7 @@ static void ApplySystemSounds(const char* startup, const char* shutdown,
     SetSoundEvent("SystemExit", shutdown);
     SetSoundEvent("WindowsLogon", "");
     SetSoundEvent("WindowsLogoff", "");
-  } else if (g_windows_version < 8) {
+  } else if (g_windows_version < 6.2) {
     SetSoundEvent("SystemStart", "");
     SetSoundEvent("SystemExit", "");
     SetSoundEvent("WindowsLogon", startup);
@@ -211,7 +616,8 @@ static void ApplySystemSounds(const char* startup, const char* shutdown,
                       L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Authentic"
                       L"ation\\LogonUI\\BootAnimation",
                       0, KEY_SET_VALUE, &key) == ERROR_SUCCESS) {
-      RegSetValueExW(key, L"DisableStartupSound", 0, REG_DWORD, (BYTE*)&value,
+      RegSetValueExW(key, L"DisableStartupSound", 0, REG_DWORD,
+                     reinterpret_cast<const BYTE*>(&value),
                      sizeof(value));
       RegCloseKey(key);
     }
@@ -220,9 +626,21 @@ static void ApplySystemSounds(const char* startup, const char* shutdown,
     SetSoundEvent("SystemExit", "");
     SetSoundEvent("WindowsLogon", "");
     SetSoundEvent("WindowsLogoff", "");
+    PatchStartupSound(startup);
+    // Enable "startup sound"
+    const DWORD value = 0;
+    HKEY key;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                      L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Authentic"
+                      L"ation\\LogonUI\\BootAnimation",
+                      0, KEY_SET_VALUE, &key) == ERROR_SUCCESS) {
+      RegSetValueExW(key, L"DisableStartupSound", 0, REG_DWORD,
+                     reinterpret_cast<const BYTE*>(&value),
+                     sizeof(value));
+      RegCloseKey(key);
+    }
     // Windows 8 and later do not support logon/logoff sounds
-    // TODO: use Task Scheduler or sth else to play sounds at logon/logoff
-    // TODO: patch imageres.dll to change default startuo sound
+    // TODO(ukia): use Task Scheduler or sth else to play sounds at logon/logoff
   }
 
   SetSoundEvent("DeviceConnect", deep2);
@@ -253,7 +671,7 @@ static void SaveBackup() {
       "DeviceConnect", "DeviceDisconnect",  "SystemExclamation", ".Default",
       "SystemDefault", "SystemNotification"};
   int i;
-  for (i = 0; i < (int)(sizeof(events) / sizeof(events[0])); i++) {
+  for (i = 0; i < static_cast<int>(sizeof(events) / sizeof(events[0])); i++) {
     char reg_path[256];
     char cur[512] = {0};
     lstrcpyA(reg_path, kAppEventsKey);
@@ -264,6 +682,10 @@ static void SaveBackup() {
     } else {
       WritePrivateProfileStringA("Sounds", events[i], "", kBackupIni);
     }
+  }
+  if (g_windows_version >= 6.2) {
+    BackupImageresDll();
+    WritePrivateProfileStringA("System", "ImageresBackup", "1", kBackupIni);
   }
 }
 
@@ -292,7 +714,7 @@ static void RestoreBackup() {
       "DeviceConnect", "DeviceDisconnect",  "SystemExclamation", ".Default",
       "SystemDefault", "SystemNotification"};
   int i;
-  for (i = 0; i < (int)(sizeof(events) / sizeof(events[0])); i++) {
+  for (i = 0; i < static_cast<int>(sizeof(events) / sizeof(events[0])); i++) {
     char wav[512];
     GetPrivateProfileStringA("Sounds", events[i], "", wav, sizeof(wav),
                              kBackupIni);
@@ -302,6 +724,11 @@ static void RestoreBackup() {
     lstrcatA(reg_path, "\\.Current");
     WriteRegSz(HKEY_CURRENT_USER, reg_path, "", wav);
   }
+
+  if (GetPrivateProfileIntA("System", "ImageresBackup", 0, kBackupIni)) {
+    RestoreImageresDll();
+  }
+
   BroadcastSettings("AppEvents");
 }
 
@@ -351,8 +778,8 @@ static bool ConvertJpegFileToBmpFile(const char* jpeg_path,
 
   OleInitialize(NULL);
   IPicture* picture = NULL;
-  HRESULT hr =
-      OleLoadPicture(stream, size, FALSE, IID_IPicture, (void**)&picture);
+  HRESULT hr = OleLoadPicture(stream, size, FALSE, IID_IPicture,
+                              reinterpret_cast<void**>(&picture));
   stream->Release();
 
   if (FAILED(hr) || !picture) {
@@ -416,7 +843,8 @@ static bool ConvertJpegFileToBmpFile(const char* jpeg_path,
   WriteFile(out_file, &bih, sizeof(bih), &written, NULL);
 
   BYTE* bits = new BYTE[img_size];
-  GetDIBits(mem_dc, dib, 0, px_h, bits, (BITMAPINFO*)&bih, DIB_RGB_COLORS);
+  GetDIBits(mem_dc, dib, 0, px_h, bits, reinterpret_cast<BITMAPINFO*>(&bih),
+            DIB_RGB_COLORS);
   WriteFile(out_file, bits, img_size, &written, NULL);
   CloseHandle(out_file);
 
@@ -441,6 +869,13 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam,
       CreateWindowA("BUTTON", "reset", WS_CHILD | WS_VISIBLE, 250, 120, 100, 30,
                     hwnd, (HMENU)IDC_BTN_RESET, GetModuleHandle(NULL), NULL);
       DeleteFileA(g_temp_bmp_path);
+
+      char buf[128];
+      _snprintf(buf, sizeof(buf), "XP Konata - Windows version: %.1f",
+                g_windows_version);
+      buf[sizeof(buf) - 1] = '\0';
+      SetWindowTextA(hwnd, buf);
+
       break;
     }
     case WM_COMMAND: {
@@ -478,6 +913,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam,
         const char* msg = "No bitmap loaded";
         TextOutA(hdc, 10, 10, msg, lstrlenA(msg));
       }
+
       EndPaint(hwnd, &ps);
       break;
     }
@@ -556,5 +992,5 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE prev_instance,
     TranslateMessage(&msg);
     DispatchMessageA(&msg);
   }
-  return (int)msg.wParam;
+  return static_cast<int>(msg.wParam);
 }
