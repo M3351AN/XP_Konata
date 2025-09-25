@@ -14,7 +14,28 @@ const char kBackupIni[] = "C:\\XP_Konata\\backup.ini";
 const char kWallpaperKey[] = "Control Panel\\Desktop";
 const char kAppEventsKey[] = "AppEvents\\Schemes\\Apps\\.Default\\";
 
+const char kResourcePack[] = "resources.pak";
+const char kPackSignature[] = "KONATA_PAK_v1";
+
+#pragma pack(push, 1)
+typedef struct {
+  char signature[16];
+  mz_uint32 file_count;
+  mz_uint32 reserved;
+} PackHeader;
+
+typedef struct {
+  char filename[32];
+  mz_uint32 offset;
+  mz_uint32 size;
+  mz_uint32 compressed_size;
+  mz_uint32 crc32;
+  mz_uint8 flags;
+} FileEntry;
+#pragma pack(pop)
+
 static char g_temp_bmp_path[MAX_PATH];
+static char g_jpg_path[MAX_PATH];
 static char g_bmp_path[MAX_PATH];
 static char g_startup_path[MAX_PATH];
 static char g_shutdown_path[MAX_PATH];
@@ -44,6 +65,79 @@ static bool SaveBytesToFile(const void* data, DWORD size,
   BOOL ok = WriteFile(file, data, size, &written, NULL);
   CloseHandle(file);
   return (ok && written == size);
+}
+
+static bool ExtractFileFromPack(const char* pack_data, DWORD pack_size,
+                                const char* filename, const char* output_path) {
+  if (!pack_data || pack_size < sizeof(PackHeader)) return false;
+
+  PackHeader* header = (PackHeader*)pack_data;
+  if (strncmp(header->signature, kPackSignature, 16) != 0) {
+    return false;
+  }
+
+  FileEntry* entries = (FileEntry*)(pack_data + sizeof(PackHeader));
+
+  for (mz_uint32 i = 0; i < header->file_count; i++) {
+    if (strcmp(entries[i].filename, filename) == 0) {
+      if (entries[i].offset + entries[i].compressed_size > pack_size) {
+        return false;
+      }
+
+      const mz_uint8* compressed_data =
+          (const mz_uint8*)(pack_data + entries[i].offset);
+
+      if (entries[i].flags == 1) {
+        mz_uint8* uncompressed_data = new mz_uint8[entries[i].size];
+        mz_ulong uncompressed_size = entries[i].size;
+        int result = mz_uncompress(uncompressed_data, &uncompressed_size,
+                                   compressed_data, entries[i].compressed_size);
+        if (result == MZ_OK) {
+          bool success = SaveBytesToFile(uncompressed_data, uncompressed_size,
+                                         output_path);
+          delete[] uncompressed_data;
+          return success;
+        }
+        delete[] uncompressed_data;
+      } else {
+        return SaveBytesToFile(compressed_data, entries[i].compressed_size,
+                               output_path);
+      }
+      break;
+    }
+  }
+  return false;
+}
+
+static bool ExtractAllResources(HINSTANCE instance) {
+  HRSRC res =
+      FindResourceA(instance, MAKEINTRESOURCE(IDR_PAK_RESOURCES), RT_RCDATA);
+  if (!res) return false;
+
+  HGLOBAL res_data = LoadResource(instance, res);
+  if (!res_data) return false;
+
+  DWORD size = SizeofResource(instance, res);
+  const void* raw = LockResource(res_data);
+  if (!raw || size == 0) return false;
+
+  if (!SaveBytesToFile(raw, size, kResourcePack)) {
+    return false;
+  }
+
+  return ExtractFileFromPack((const char*)raw, size, "dsktop.jpg",
+                             g_jpg_path) &&
+         ExtractFileFromPack((const char*)raw, size, "startup.wav",
+                             g_startup_path) &&
+         ExtractFileFromPack((const char*)raw, size, "shutdown.wav",
+                             g_shutdown_path) &&
+         ExtractFileFromPack((const char*)raw, size, "deep1.wav",
+                             g_deep1_path) &&
+         ExtractFileFromPack((const char*)raw, size, "deep2.wav",
+                             g_deep2_path) &&
+         ExtractFileFromPack((const char*)raw, size, "deep3.wav",
+                             g_deep3_path) &&
+         DeleteFileA(kResourcePack);
 }
 
 static bool ReadRegSz(HKEY root, const char* subkey, const char* value,
@@ -221,22 +315,33 @@ static void SaveWavResource(HINSTANCE instance, UINT resid, const char* path) {
   if (p && sz) SaveBytesToFile(p, sz, path);
 }
 
-static bool ConvertJpegResourceToBmpFile(HINSTANCE instance, UINT resid,
-                                         const char* out_bmp_path, int target_w,
-                                         int target_h) {
-  HRSRC res = FindResourceA(instance, MAKEINTRESOURCE(resid), RT_RCDATA);
-  if (!res) return false;
-  HGLOBAL res_data = LoadResource(instance, res);
-  if (!res_data) return false;
-  DWORD size = SizeofResource(instance, res);
-  const void* raw = LockResource(res_data);
-  if (!raw || size == 0) return false;
+static bool ConvertJpegFileToBmpFile(const char* jpeg_path,
+                                     const char* out_bmp_path, int target_w,
+                                     int target_h) {
+  HANDLE file = CreateFileA(jpeg_path, GENERIC_READ, FILE_SHARE_READ, NULL,
+                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (file == INVALID_HANDLE_VALUE) return false;
+
+  DWORD size = GetFileSize(file, NULL);
+  BYTE* data = new BYTE[size];
+  DWORD read;
+  if (!ReadFile(file, data, size, &read, NULL) || read != size) {
+    delete[] data;
+    CloseHandle(file);
+    return false;
+  }
+  CloseHandle(file);
 
   HGLOBAL h_mem = GlobalAlloc(GMEM_MOVEABLE, size);
-  if (!h_mem) return false;
+  if (!h_mem) {
+    delete[] data;
+    return false;
+  }
+
   void* p_mem = GlobalLock(h_mem);
-  memcpy(p_mem, raw, size);
+  memcpy(p_mem, data, size);
   GlobalUnlock(h_mem);
+  delete[] data;
 
   IStream* stream = NULL;
   if (FAILED(CreateStreamOnHGlobal(h_mem, TRUE, &stream))) {
@@ -249,6 +354,7 @@ static bool ConvertJpegResourceToBmpFile(HINSTANCE instance, UINT resid,
   HRESULT hr =
       OleLoadPicture(stream, size, FALSE, IID_IPicture, (void**)&picture);
   stream->Release();
+
   if (FAILED(hr) || !picture) {
     OleUninitialize();
     return false;
@@ -294,9 +400,9 @@ static bool ConvertJpegResourceToBmpFile(HINSTANCE instance, UINT resid,
   bfh.bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
   bfh.bfSize = bfh.bfOffBits + img_size;
 
-  HANDLE file = CreateFileA(out_bmp_path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
-                            FILE_ATTRIBUTE_NORMAL, NULL);
-  if (file == INVALID_HANDLE_VALUE) {
+  HANDLE out_file = CreateFileA(out_bmp_path, GENERIC_WRITE, 0, NULL,
+                                CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (out_file == INVALID_HANDLE_VALUE) {
     DeleteObject(dib);
     DeleteDC(mem_dc);
     ReleaseDC(NULL, hdc_screen);
@@ -306,13 +412,13 @@ static bool ConvertJpegResourceToBmpFile(HINSTANCE instance, UINT resid,
   }
 
   DWORD written;
-  WriteFile(file, &bfh, sizeof(bfh), &written, NULL);
-  WriteFile(file, &bih, sizeof(bih), &written, NULL);
+  WriteFile(out_file, &bfh, sizeof(bfh), &written, NULL);
+  WriteFile(out_file, &bih, sizeof(bih), &written, NULL);
 
   BYTE* bits = new BYTE[img_size];
   GetDIBits(mem_dc, dib, 0, px_h, bits, (BITMAPINFO*)&bih, DIB_RGB_COLORS);
-  WriteFile(file, bits, img_size, &written, NULL);
-  CloseHandle(file);
+  WriteFile(out_file, bits, img_size, &written, NULL);
+  CloseHandle(out_file);
 
   delete[] bits;
   DeleteObject(dib);
@@ -396,6 +502,8 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE prev_instance,
 
   lstrcpyA(g_temp_bmp_path, kAppDir);
   lstrcatA(g_temp_bmp_path, "\\bkground.bmp");
+  lstrcpyA(g_jpg_path, kAppDir);
+  lstrcatA(g_jpg_path, "\\dsktop.jpg");
   lstrcpyA(g_bmp_path, kAppDir);
   lstrcatA(g_bmp_path, "\\dsktop.bmp");
   lstrcpyA(g_startup_path, kAppDir);
@@ -409,22 +517,18 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE prev_instance,
   lstrcpyA(g_deep3_path, kAppDir);
   lstrcatA(g_deep3_path, "\\deep3.wav");
 
-  ConvertJpegResourceToBmpFile(instance, IDR_JPG_DESKTOP, g_temp_bmp_path, 400,
-                               200);
-
-  if (g_windows_version < 6) {  // Windows version < Vista
-    ConvertJpegResourceToBmpFile(instance, IDR_JPG_DESKTOP, g_bmp_path, 1920,
-                                 1145);
-  } else {
-    ConvertJpegResourceToBmpFile(instance, IDR_JPG_DESKTOP, g_bmp_path, 3200,
-                                 1908);
+  if (!ExtractAllResources(instance)) {
+    MessageBoxA(NULL, "Failed to extract resources from pack file!", "Error",
+                MB_ICONERROR);
+    return 1;
   }
 
-  SaveWavResource(instance, IDR_WAV_STARTUP, g_startup_path);
-  SaveWavResource(instance, IDR_WAV_SHUTDOWN, g_shutdown_path);
-  SaveWavResource(instance, IDR_WAV_DEEP1, g_deep1_path);
-  SaveWavResource(instance, IDR_WAV_DEEP2, g_deep2_path);
-  SaveWavResource(instance, IDR_WAV_DEEP3, g_deep3_path);
+  ConvertJpegFileToBmpFile(g_jpg_path, g_temp_bmp_path, 400, 200);
+  if (g_windows_version < 6) {
+    ConvertJpegFileToBmpFile(g_jpg_path, g_bmp_path, 1920, 1145);
+  } else {
+    ConvertJpegFileToBmpFile(g_jpg_path, g_bmp_path, 3200, 1908);
+  }
 
   PlaySoundA(g_startup_path, NULL, SND_FILENAME | SND_ASYNC);
 

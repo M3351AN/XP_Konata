@@ -57,6 +57,11 @@ LINK32=link.exe
 # PROP Default_Filter "cpp;c;cxx;rc;def;r;odl;idl;hpj;bat"
 # Begin Source File
 
+SOURCE=.\miniz.c
+# SUBTRACT CPP /YX /Yc /Yu
+# End Source File
+# Begin Source File
+
 SOURCE=.\pch.cpp
 # ADD CPP /Yc
 # End Source File
@@ -71,6 +76,10 @@ SOURCE=.\XP_Konata.cpp
 # Begin Source File
 
 SOURCE=.\framework.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\miniz.h
 # End Source File
 # Begin Source File
 
