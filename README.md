@@ -1,6 +1,7 @@
 # XP_Konata
-A tool to set windows desktop background and system sounds as Izumi Konata
-<img width="446" height="98" alt="image" src="https://github.com/user-attachments/assets/12ca5791-6d11-41df-8ca0-a9bc8b140416" />
+なんかさ、切羽詰まってくると無性に掃除とかしたくならない？
+
+<img width="414" height="290" alt="image" src="https://github.com/user-attachments/assets/2495aea3-8d41-4d6f-a999-753c8f5baca2" />
 
 ---
 ## What Is This
