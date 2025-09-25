@@ -9,7 +9,7 @@ This is a tool that automatically sets Windows system sound effects and desktop 
 
 - XP_Konata_VC6.dsw is workspace for VC6
 - XP_Konata_v141_xp.sln is solution for VS2017&later with v141_xp toolset
-## Differences from V143 Branch
+## Differences from V143 Branch(v0.xxxx)
 
 - V143 branch We try to use the latest v143 toolset to build, so we are very careful in using WinApi, and even need to exclude CRT dependency, so the function is not perfect.
 
