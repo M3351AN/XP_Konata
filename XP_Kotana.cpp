@@ -92,7 +92,7 @@ static const char* kHello =
 
 
 BOOL GetResourcePath(LPTSTR path, DWORD path_size) {
-  _tcscpy(path, TEXT("C:\\XP_Kotana"));
+  _tcscpy(path, TEXT("C:\\XP_Konata"));
   CreateDirectory(path, NULL);
   return TRUE;
 }
