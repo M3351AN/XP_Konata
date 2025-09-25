@@ -1,233 +1,456 @@
-﻿﻿// Copyright (c) 2025 渟雲. All rights reserved.
+﻿// Copyright (c) 2025 渟雲. All rights reserved.
 #include "pch.h"
+#include "./resource.h"
 
-#if _MSC_VER >= 1910
-#include "./helper.h"
-#endif
+#pragma comment(lib, "winmm.lib")
+#pragma comment(lib, "ole32.lib")
+#pragma comment(lib, "oleaut32.lib")
 
-#include "./deep1.h"
-#include "./deep2.h"
-#include "./deep3.h"
-#include "./dsktop.h"
-#include "./shutdown.h"
-#include "./startup.h"
+const char kAppTitle[] = "XP Konata";
+const char kClassName[] = "KonataWnd";
+const char kAppDir[] = "C:\\XP_Konata";
+const char kBackupIni[] = "C:\\XP_Konata\\backup.ini";
 
+const char kWallpaperKey[] = "Control Panel\\Desktop";
+const char kAppEventsKey[] = "AppEvents\\Schemes\\Apps\\.Default\\";
 
-#define _WIN32_WINNT 0x0501
-#define WINVER 0x0501
-#define NTDDI_VERSION 0x05010000
+static char g_temp_bmp_path[MAX_PATH];
+static char g_bmp_path[MAX_PATH];
+static char g_startup_path[MAX_PATH];
+static char g_shutdown_path[MAX_PATH];
+static char g_deep1_path[MAX_PATH];
+static char g_deep2_path[MAX_PATH];
+static char g_deep3_path[MAX_PATH];
 
-static const char* kHello =
-    "                                   .i(vcrjrnuuxrnXLZwZULLj,..             "
-    "       \n"
-    "                        .. ..   ..:rcxjjuvj1<;`'..`I-rQQUOc'              "
-    "       \n"
-    "                       . //,   .. xUtjcx?,.           ;zQ0Q^^,\".. .  "
-    "....        \n"
-    "                       . (Qv(i`   lxxL/.             "
-    "'\"/Zz<:l\":I;::::\":;:'       \n"
-    "                         ^znxvn\\?_]1fLCj//\\|||11]_>;\",!!,. "
-    "'\",^`^``^^^``'.       \n"
-    "                     '\":l![UYjjxunnxxJXXYXcnrrxxnnuuxf)~;`               "
-    "        \n"
-    "                 `I~]]?>i)jjrjjjjjjj0vfjjxcvjjjjjjjjjrxx/)?!^             "
-    "       \n"
-    "              \"<]]_>I:,,,]jrjjjjjjfCJtjjjjffjjjjjjjjjjjjjf|[[[I          "
-    "        \n"
-    "          . ;[{+;;<l:::::,i{tjjjjfzbnjjjjjjjjjjjjjjjjjrrrjfxl!([` .       "
-    "       \n"
-    "         .^)t]+]xj?I,:;I!><_1jjjfzkpfjjjjjjjjfjjfjjjf/)}+i:_/<^+/l        "
-    "       \n"
-    "         .:}>I?j{<~]{(\\tfjrrjjjfcLrOfjjjjjjjjUxrcjjf([_~<>>i+x(!<r! .    "
-    "        \n"
-    "         .  ')zt/jrrrrjjjjjnJjfuC[(0fjrjjjjjtOvumUjjjrrjrjjjjfUL/_x^..    "
-    "       \n"
-    "         . !vvfjjjjjjjjjjfxmYtnQ{;}OtxnjjjjjfJXXuxQjjjjjjjjjjjfz0t|( .    "
-    "       \n"
-    "        . _JxfjjjjjjjjjjjrQdnzZ)~\"iOjuvfjjjjfXLQt-rLrjjjjjjjjjjfn0ju,.   "
-    "        \n"
-    "         _JjffjjjjjjjjjjjJh0rL_^^\"^XuvmnjjjjfvZJ>^\"}CzYfjjjjjjjjfxQY>   "
-    "         \n"
-    "      . "
-    "!CrfxJxjjjjjjjjfXQUcJ]`\"\"\"`}JrkQjjjjfnax\"\"\"^~UQJjfjjjjjjffrp1       "
-    "     \n"
-    "      "
-    ".'XufvYOjjjjjjjjjrZ{n0f`\"\"\"\"\":YxZnJrfjjxk<^\"\"\"^lcQQxfjjjjnzxfrJI "
-    "..        \n"
-    "       "
-    "{JjY(lQjjjjjjjjfQf,~m;`^^^^^`?UQ}]YzjfrU^^^^^^`^\\J0XffjjnbQJvcX^..       "
-    " \n"
-    "      ^LXn> "
-    ":LjjjjjjjfvX_]?|_[){[-+\"^|q\\'!\\XcrJ]]}1(--?-jZhLnfff0cnLt0t .        \n"
-    "      :C}' .'zxfjjfzmfw{\\C0Zpkoooahx^^/X\"^^;?CMo#*oadwZLr(pCCCntcQxn "
-    "l]'.        \n"
-    "      .'   . tzfjjzwdZpQiYZqdbpZUnt>\"\"^:,\"\"^`l(xXObbbpmQ-YQYrqLLvwz|  "
-    " ..        \n"
-    "            .IJrj0JOQQLm/}{[_<l:^`^^\"^^^\"^^^\"^``^:l>+]\\\\|mJXf0uOzOC- "
-    ".           \n"
-    "            . "
-    "_JwzCwJJUQn\"Ill!ll;\"\"\"\"-[?]]?\\_^\"\";IIll;~l\\UCvtCZvtfJl .         "
-    "  \n"
-    "               "
-    ";QxcdnJncC];;;;I;:\"\"\"`(t~~~_(|^\"\",;;;;;:?vxYrfUCtUrC\"             \n"
-    "               ,CCcmjrjtYdv(-!,^^^^^`!/{]]{1!^^^^^,l_(uqJfjjfUJtJJJ^      "
-    "       \n"
-    "             . ]OQrmjjjfnwLLwwQnt)]_~l:i>>!l>_[)tnXmkwJqvfjjtCYfjZ0:..    "
-    "       \n"
-    "             . YwnfmxfjjjwLJqpmJLQ0mq0+____JpZ0QLCJZbmJqxjjjfOvffua? .    "
-    "       \n"
-    "            . +avffQcfjjfLO0kqQZmqpkY{?-??-{XbpwmZQLbkLZfjjjrmjjjfCz..    "
-    "       \n"
-    "           . \"QXfjfY0fjjfcpkkppqqwmb/+-----+(bmwwqppp#kJfjjfXQfjjjfL+    "
-    "        \n"
-    "            `vXfjfxUqnrjjjbpwqwwwwwqq\\\\\\|(()ZpmwmwwqqwhufjrrwJrjjjjrX; "
-    "          \n"
-    "           \"tjfjfxUJQZLXffQv)nYCCLLCqnII;,`)dOOOZZ0Uunmjjx0QZJXjjjjffn, "
-    ".        \n"
-    "        . lj)fjjxYJJLmLwntn0)?])/xvcc0!   IQzzvnf|{[{XYff0ZZLJCcxrjjj\\t^ "
-    "        \n"
-    "         "
-    ">f_fjfxJCJ0U?_XZxtQQYx{?})\\nYU^.^JUj|)1[{/zcmrfLO[+XOJJzznjj/{/'..      "
-    "\n";
+static DWORD g_windows_version = 0;
 
+static HBITMAP g_bmp = NULL;
 
-BOOL GetResourcePath(LPTSTR path, DWORD path_size) {
-  _tcscpy(path, TEXT("C:\\XP_Konata"));
-  CreateDirectory(path, NULL);
-  return TRUE;
-}
-
-BOOL WriteToFile(const BYTE* data, DWORD size, LPCTSTR file_path) {
-  HANDLE file = CreateFile(file_path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
-                           FILE_ATTRIBUTE_NORMAL, NULL);
-  if (file == INVALID_HANDLE_VALUE) {
-    return FALSE;
-  }
-  DWORD bytes_written;
-  BOOL success = WriteFile(file, data, size, &bytes_written, NULL);
-  CloseHandle(file);
-  return (success && bytes_written == size);
-}
-
-void SetSoundEvent(LPCTSTR event_name, LPCTSTR sound_path) {
-  HKEY key;
-  DWORD disposition;
-  TCHAR reg_path[256];
-  _tcscpy(reg_path, TEXT("AppEvents\\Schemes\\Apps\\.Default\\"));
-  _tcscat(reg_path, event_name);
-  _tcscat(reg_path, TEXT("\\.Current"));
-  if (RegCreateKeyEx(HKEY_CURRENT_USER, reg_path, 0, NULL,
-                     REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &key,
-                     &disposition) == ERROR_SUCCESS) {
-    DWORD path_len = _tcslen(sound_path) + 1;
-    RegSetValueEx(key, TEXT(""), 0, REG_SZ, (const BYTE*)sound_path,
-                  path_len * sizeof(TCHAR));
-    RegCloseKey(key);
-  }
-}
-
-void SetWallpaper(LPCTSTR path) {
-  HKEY key;
-  if (RegOpenKeyEx(HKEY_CURRENT_USER, TEXT("Control Panel\\Desktop"), 0,
-                   KEY_SET_VALUE, &key) == ERROR_SUCCESS) {
-    RegSetValueEx(key, TEXT("Wallpaper"), 0, REG_SZ, (const BYTE*)path,
-                  (DWORD)((_tcslen(path) + 1) * sizeof(TCHAR)));
-    const TCHAR* style = TEXT("2");
-    RegSetValueEx(key, TEXT("WallpaperStyle"), 0, REG_SZ, (const BYTE*)style,
-                  (DWORD)((_tcslen(style) + 1) * sizeof(TCHAR)));
-    const TCHAR* tile = TEXT("0");
-    RegSetValueEx(key, TEXT("TileWallpaper"), 0, REG_SZ, (const BYTE*)tile,
-                  (DWORD)((_tcslen(tile) + 1) * sizeof(TCHAR)));
-    RegCloseKey(key);
-  }
-
-  SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, (PVOID)path,
-                       SPIF_UPDATEINIFILE | SPIF_SENDWININICHANGE);
-  SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0,
-                     (LPARAM)TEXT("Control Panel\\Desktop"), SMTO_ABORTIFHUNG,
-                     1000, NULL);
-  // Is too complex to refresh Active Desktop stuffs
+static void EnsureWinVer() {
   OSVERSIONINFO vi = {0};
   vi.dwOSVersionInfoSize = sizeof(vi);
   GetVersionEx(&vi);
+  g_windows_version = vi.dwMajorVersion;
+}
 
-  if (vi.dwMajorVersion < 6) {  // Windows version < Vista
-    ShellExecute(NULL, TEXT("open"), TEXT("rundll32.exe"),
-                 TEXT("shell32.dll,Control_RunDLL desk.cpl,,0"), NULL,
-                 SW_SHOWNORMAL);
+static void EnsureAppDir() { CreateDirectoryA(kAppDir, NULL); }
+
+static bool SaveBytesToFile(const void* data, DWORD size,
+                            const char* out_path) {
+  HANDLE file = CreateFileA(out_path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
+                            FILE_ATTRIBUTE_NORMAL, NULL);
+  if (file == INVALID_HANDLE_VALUE) return false;
+  DWORD written = 0;
+  BOOL ok = WriteFile(file, data, size, &written, NULL);
+  CloseHandle(file);
+  return (ok && written == size);
+}
+
+static bool ReadRegSz(HKEY root, const char* subkey, const char* value,
+                      char* out, DWORD out_size) {
+  HKEY key;
+  if (RegOpenKeyExA(root, subkey, 0, KEY_QUERY_VALUE, &key) != ERROR_SUCCESS)
+    return false;
+  DWORD type = 0;
+  DWORD size = out_size;
+  LONG r = RegQueryValueExA(key, value, NULL, &type, (LPBYTE)out, &size);
+  RegCloseKey(key);
+  if (r == ERROR_SUCCESS && (type == REG_SZ || type == REG_EXPAND_SZ)) {
+    if (size >= out_size) out[out_size - 1] = '\0';
+    return true;
+  }
+  return false;
+}
+
+static bool WriteRegSz(HKEY root, const char* subkey, const char* value,
+                       const char* data) {
+  HKEY key;
+  DWORD disp = 0;
+  if (RegCreateKeyExA(root, subkey, 0, NULL, REG_OPTION_NON_VOLATILE,
+                      KEY_SET_VALUE, NULL, &key, &disp) != ERROR_SUCCESS)
+    return false;
+  LONG r = RegSetValueExA(key, value, 0, REG_SZ, (const BYTE*)data,
+                          (DWORD)(strlen(data) + 1));
+  RegCloseKey(key);
+  return (r == ERROR_SUCCESS);
+}
+
+static void BroadcastSettings(const char* area) {
+  SendMessageTimeoutA(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)area,
+                      SMTO_ABORTIFHUNG, 1000, NULL);
+}
+
+static void ApplyWallpaper(const char* bmp_path) {
+  WriteRegSz(HKEY_CURRENT_USER, kWallpaperKey, "Wallpaper", bmp_path);
+  WriteRegSz(HKEY_CURRENT_USER, kWallpaperKey, "WallpaperStyle", "2");
+  WriteRegSz(HKEY_CURRENT_USER, kWallpaperKey, "TileWallpaper", "0");
+  SystemParametersInfoA(SPI_SETDESKWALLPAPER, 0, (PVOID)bmp_path,
+                        SPIF_UPDATEINIFILE | SPIF_SENDWININICHANGE);
+  BroadcastSettings("Control Panel\\Desktop");
+}
+
+static void SetSoundEvent(const char* event_name, const char* wav_path) {
+  char reg_path[256];
+  lstrcpyA(reg_path, kAppEventsKey);
+  lstrcatA(reg_path, event_name);
+  lstrcatA(reg_path, "\\.Current");
+  WriteRegSz(HKEY_CURRENT_USER, reg_path, "", wav_path);
+}
+
+static void ApplySystemSounds(const char* startup, const char* shutdown,
+                              const char* deep1, const char* deep2,
+                              const char* deep3) {
+  if (g_windows_version < 6) {
+    SetSoundEvent("SystemStart", startup);
+    SetSoundEvent("SystemExit", shutdown);
+    SetSoundEvent("WindowsLogon", "");
+    SetSoundEvent("WindowsLogoff", "");
+  } else if (g_windows_version < 8) {
+    SetSoundEvent("SystemStart", "");
+    SetSoundEvent("SystemExit", "");
+    SetSoundEvent("WindowsLogon", startup);
+    SetSoundEvent("WindowsLogoff", shutdown);
+    // Disable "startup sound", we using logon sound instead
+    const DWORD value = 1;
+    HKEY key;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                      L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Authentic"
+                      L"ation\\LogonUI\\BootAnimation",
+                      0, KEY_SET_VALUE, &key) == ERROR_SUCCESS) {
+      RegSetValueExW(key, L"DisableStartupSound", 0, REG_DWORD, (BYTE*)&value,
+                     sizeof(value));
+      RegCloseKey(key);
+    }
+  } else {
+    SetSoundEvent("SystemStart", "");
+    SetSoundEvent("SystemExit", "");
+    SetSoundEvent("WindowsLogon", "");
+    SetSoundEvent("WindowsLogoff", "");
+    // Windows 8 and later do not support logon/logoff sounds
+    // TODO: use Task Scheduler or sth else to play sounds at logon/logoff
+    // TODO: patch imageres.dll to change default startuo sound
+  }
+
+  SetSoundEvent("DeviceConnect", deep2);
+  SetSoundEvent("DeviceDisconnect", deep1);
+  SetSoundEvent("SystemExclamation", deep2);
+  SetSoundEvent(".Default", deep3);
+  SetSoundEvent("SystemDefault", deep3);
+  SetSoundEvent("SystemNotification", deep1);
+  BroadcastSettings("AppEvents");
+}
+
+static void SaveBackup() {
+  EnsureAppDir();
+  char val[512] = {0};
+
+  if (ReadRegSz(HKEY_CURRENT_USER, kWallpaperKey, "Wallpaper", val,
+                sizeof(val)))
+    WritePrivateProfileStringA("Desktop", "Wallpaper", val, kBackupIni);
+  if (ReadRegSz(HKEY_CURRENT_USER, kWallpaperKey, "WallpaperStyle", val,
+                sizeof(val)))
+    WritePrivateProfileStringA("Desktop", "WallpaperStyle", val, kBackupIni);
+  if (ReadRegSz(HKEY_CURRENT_USER, kWallpaperKey, "TileWallpaper", val,
+                sizeof(val)))
+    WritePrivateProfileStringA("Desktop", "TileWallpaper", val, kBackupIni);
+
+  const char* events[] = {
+      "SystemStart",   "WindowsLogon",      "WindowsLogoff",     "SystemExit",
+      "DeviceConnect", "DeviceDisconnect",  "SystemExclamation", ".Default",
+      "SystemDefault", "SystemNotification"};
+  int i;
+  for (i = 0; i < (int)(sizeof(events) / sizeof(events[0])); i++) {
+    char reg_path[256];
+    char cur[512] = {0};
+    lstrcpyA(reg_path, kAppEventsKey);
+    lstrcatA(reg_path, events[i]);
+    lstrcatA(reg_path, "\\.Current");
+    if (ReadRegSz(HKEY_CURRENT_USER, reg_path, "", cur, sizeof(cur))) {
+      WritePrivateProfileStringA("Sounds", events[i], cur, kBackupIni);
+    } else {
+      WritePrivateProfileStringA("Sounds", events[i], "", kBackupIni);
+    }
   }
 }
 
-void SetSystemSound(LPCTSTR startup_path, LPCTSTR shutdown_path,
-                         LPCTSTR deep1_path, LPCTSTR deep2_path,
-                         LPCTSTR deep3_path) {
-  SetSoundEvent(TEXT("SystemStart"), startup_path);
-  SetSoundEvent(TEXT("WindowsLogon"), startup_path);
-  SetSoundEvent(TEXT("WindowsLogoff"), shutdown_path);
-  SetSoundEvent(TEXT("SystemExit"), shutdown_path);
-  SetSoundEvent(TEXT("DeviceConnect"), deep2_path);
-  SetSoundEvent(TEXT("DeviceDisconnect"), deep1_path);
-  SetSoundEvent(TEXT("SystemExclamation"), deep2_path);
-  SetSoundEvent(TEXT(".Default"), deep3_path);
-  SetSoundEvent(TEXT("SystemDefault"), deep3_path);
-  SetSoundEvent(TEXT("SystemNotification"), deep1_path);
-  SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0,
-                     (LPARAM)TEXT("AppEvents"), SMTO_ABORTIFHUNG, 1000, NULL);
+static void RestoreBackup() {
+  char val[512];
+
+  GetPrivateProfileStringA("Desktop", "Wallpaper", "", val, sizeof(val),
+                           kBackupIni);
+  if (val[0]) WriteRegSz(HKEY_CURRENT_USER, kWallpaperKey, "Wallpaper", val);
+  GetPrivateProfileStringA("Desktop", "WallpaperStyle", "", val, sizeof(val),
+                           kBackupIni);
+  if (val[0])
+    WriteRegSz(HKEY_CURRENT_USER, kWallpaperKey, "WallpaperStyle", val);
+  GetPrivateProfileStringA("Desktop", "TileWallpaper", "", val, sizeof(val),
+                           kBackupIni);
+  if (val[0])
+    WriteRegSz(HKEY_CURRENT_USER, kWallpaperKey, "TileWallpaper", val);
+
+  if (ReadRegSz(HKEY_CURRENT_USER, kWallpaperKey, "Wallpaper", val,
+                sizeof(val))) {
+    ApplyWallpaper(val);
+  }
+
+  const char* events[] = {
+      "SystemStart",   "WindowsLogon",      "WindowsLogoff",     "SystemExit",
+      "DeviceConnect", "DeviceDisconnect",  "SystemExclamation", ".Default",
+      "SystemDefault", "SystemNotification"};
+  int i;
+  for (i = 0; i < (int)(sizeof(events) / sizeof(events[0])); i++) {
+    char wav[512];
+    GetPrivateProfileStringA("Sounds", events[i], "", wav, sizeof(wav),
+                             kBackupIni);
+    char reg_path[256];
+    lstrcpyA(reg_path, kAppEventsKey);
+    lstrcatA(reg_path, events[i]);
+    lstrcatA(reg_path, "\\.Current");
+    WriteRegSz(HKEY_CURRENT_USER, reg_path, "", wav);
+  }
+  BroadcastSettings("AppEvents");
 }
 
-void mainCRTStartup() {
-  TCHAR xp_kotana_path[MAX_PATH];
-  if (!GetResourcePath(xp_kotana_path, MAX_PATH)) {
-    ExitProcess(1);
-  }
-
-  TCHAR jpg_path[MAX_PATH];
-  TCHAR startup_path[MAX_PATH];
-  TCHAR shutdown_path[MAX_PATH];
-  TCHAR deep1_path[MAX_PATH];
-  TCHAR deep2_path[MAX_PATH];
-  TCHAR deep3_path[MAX_PATH];
-
-  _tcscpy(jpg_path, xp_kotana_path);
-  _tcscat(jpg_path, TEXT("\\dsktop.jpg"));
-
-  _tcscpy(startup_path, xp_kotana_path);
-  _tcscat(startup_path, TEXT("\\startup.wav"));
-
-  _tcscpy(shutdown_path, xp_kotana_path);
-  _tcscat(shutdown_path, TEXT("\\shutdown.wav"));
-
-  _tcscpy(deep1_path, xp_kotana_path);
-  _tcscat(deep1_path, TEXT("\\deep1.wav"));
-
-  _tcscpy(deep2_path, xp_kotana_path);
-  _tcscat(deep2_path, TEXT("\\deep2.wav"));
-
-  _tcscpy(deep3_path, xp_kotana_path);
-  _tcscat(deep3_path, TEXT("\\deep3.wav"));
-
-  if (!WriteToFile(dsktop, sizeof(dsktop), jpg_path)) {
-    ExitProcess(1);
-  }
-  if (!WriteToFile(startup, sizeof(startup), startup_path)) {
-    ExitProcess(1);
-  }
-  WriteToFile(shutdown, sizeof(shutdown), shutdown_path);
-  WriteToFile(deep1, sizeof(deep1), deep1_path);
-  WriteToFile(deep2, sizeof(deep2), deep2_path);
-  WriteToFile(deep3, sizeof(deep3), deep3_path);
-
-  DWORD bytes_written;
-  HANDLE stdout_handle = GetStdHandle(STD_OUTPUT_HANDLE);
-  WriteFile(stdout_handle, kHello, strlen(kHello), &bytes_written, NULL);
-
-  SetWallpaper(jpg_path);
-  SetSystemSound(startup_path, shutdown_path, deep1_path, deep2_path,
-                      deep3_path);
-  PlaySound(startup_path, NULL, SND_FILENAME | SND_SYNC);
-  Sleep(3000);
-  ExitProcess(0);
+static void SaveWavResource(HINSTANCE instance, UINT resid, const char* path) {
+  HRSRC r = FindResourceA(instance, MAKEINTRESOURCE(resid), "WAVE");
+  if (!r) return;
+  HGLOBAL g = LoadResource(instance, r);
+  if (!g) return;
+  DWORD sz = SizeofResource(instance, r);
+  const void* p = LockResource(g);
+  if (p && sz) SaveBytesToFile(p, sz, path);
 }
-#if _MSC_VER < 1910
-int main() { mainCRTStartup(); return 0;}
-#endif
+
+static bool ConvertJpegResourceToBmpFile(HINSTANCE instance, UINT resid,
+                                         const char* out_bmp_path, int target_w,
+                                         int target_h) {
+  HRSRC res = FindResourceA(instance, MAKEINTRESOURCE(resid), RT_RCDATA);
+  if (!res) return false;
+  HGLOBAL res_data = LoadResource(instance, res);
+  if (!res_data) return false;
+  DWORD size = SizeofResource(instance, res);
+  const void* raw = LockResource(res_data);
+  if (!raw || size == 0) return false;
+
+  HGLOBAL h_mem = GlobalAlloc(GMEM_MOVEABLE, size);
+  if (!h_mem) return false;
+  void* p_mem = GlobalLock(h_mem);
+  memcpy(p_mem, raw, size);
+  GlobalUnlock(h_mem);
+
+  IStream* stream = NULL;
+  if (FAILED(CreateStreamOnHGlobal(h_mem, TRUE, &stream))) {
+    GlobalFree(h_mem);
+    return false;
+  }
+
+  OleInitialize(NULL);
+  IPicture* picture = NULL;
+  HRESULT hr =
+      OleLoadPicture(stream, size, FALSE, IID_IPicture, (void**)&picture);
+  stream->Release();
+  if (FAILED(hr) || !picture) {
+    OleUninitialize();
+    return false;
+  }
+
+  OLE_XSIZE_HIMETRIC hm_width = 0, hm_height = 0;
+  picture->get_Width(&hm_width);
+  picture->get_Height(&hm_height);
+
+  HDC hdc_screen = GetDC(NULL);
+  int dpi_x = GetDeviceCaps(hdc_screen, LOGPIXELSX);
+  int dpi_y = GetDeviceCaps(hdc_screen, LOGPIXELSY);
+
+  int px_w = MulDiv(hm_width, dpi_x, 2540);
+  int px_h = MulDiv(hm_height, dpi_y, 2540);
+  if (target_w > 0 && target_h > 0) {
+    px_w = target_w;
+    px_h = target_h;
+  }
+
+  HDC mem_dc = CreateCompatibleDC(hdc_screen);
+  HBITMAP dib = CreateCompatibleBitmap(hdc_screen, px_w, px_h);
+  HBITMAP old = (HBITMAP)SelectObject(mem_dc, dib);
+
+  picture->Render(mem_dc, 0, 0, px_w, px_h, 0, hm_height, hm_width, -hm_height,
+                  NULL);
+
+  SelectObject(mem_dc, old);
+
+  BITMAPFILEHEADER bfh;
+  BITMAPINFOHEADER bih;
+  ZeroMemory(&bfh, sizeof(bfh));
+  ZeroMemory(&bih, sizeof(bih));
+  bih.biSize = sizeof(BITMAPINFOHEADER);
+  bih.biWidth = px_w;
+  bih.biHeight = px_h;
+  bih.biPlanes = 1;
+  bih.biBitCount = 24;
+  bih.biCompression = BI_RGB;
+
+  DWORD img_size = ((px_w * 3 + 3) & ~3) * px_h;
+  bfh.bfType = 0x4D42;  // 'BM'
+  bfh.bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
+  bfh.bfSize = bfh.bfOffBits + img_size;
+
+  HANDLE file = CreateFileA(out_bmp_path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
+                            FILE_ATTRIBUTE_NORMAL, NULL);
+  if (file == INVALID_HANDLE_VALUE) {
+    DeleteObject(dib);
+    DeleteDC(mem_dc);
+    ReleaseDC(NULL, hdc_screen);
+    picture->Release();
+    OleUninitialize();
+    return false;
+  }
+
+  DWORD written;
+  WriteFile(file, &bfh, sizeof(bfh), &written, NULL);
+  WriteFile(file, &bih, sizeof(bih), &written, NULL);
+
+  BYTE* bits = new BYTE[img_size];
+  GetDIBits(mem_dc, dib, 0, px_h, bits, (BITMAPINFO*)&bih, DIB_RGB_COLORS);
+  WriteFile(file, bits, img_size, &written, NULL);
+  CloseHandle(file);
+
+  delete[] bits;
+  DeleteObject(dib);
+  DeleteDC(mem_dc);
+  ReleaseDC(NULL, hdc_screen);
+  picture->Release();
+  OleUninitialize();
+
+  return true;
+}
+
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam,
+                            LPARAM lparam) {
+  switch (message) {
+    case WM_CREATE: {
+      g_bmp = (HBITMAP)LoadImageA(NULL, g_temp_bmp_path, IMAGE_BITMAP, 0, 0,
+                                  LR_LOADFROMFILE);
+      CreateWindowA("BUTTON", "set", WS_CHILD | WS_VISIBLE, 50, 120, 100, 30,
+                    hwnd, (HMENU)IDC_BTN_SET, GetModuleHandle(NULL), NULL);
+      CreateWindowA("BUTTON", "reset", WS_CHILD | WS_VISIBLE, 250, 120, 100, 30,
+                    hwnd, (HMENU)IDC_BTN_RESET, GetModuleHandle(NULL), NULL);
+      DeleteFileA(g_temp_bmp_path);
+      break;
+    }
+    case WM_COMMAND: {
+      switch (LOWORD(wparam)) {
+        case IDC_BTN_SET:
+          PlaySoundA(g_deep1_path, NULL, SND_FILENAME | SND_ASYNC);
+          SaveBackup();
+          ApplyWallpaper(g_bmp_path);
+          ApplySystemSounds(g_startup_path, g_shutdown_path, g_deep1_path,
+                            g_deep2_path, g_deep3_path);
+          break;
+        case IDC_BTN_RESET:
+          PlaySoundA(g_deep2_path, NULL, SND_FILENAME | SND_ASYNC);
+          RestoreBackup();
+          break;
+      }
+      break;
+    }
+    case WM_PAINT: {
+      PAINTSTRUCT ps;
+      HDC hdc = BeginPaint(hwnd, &ps);
+      if (g_bmp) {
+        HDC mem_dc = CreateCompatibleDC(hdc);
+        HBITMAP old_bmp = (HBITMAP)SelectObject(mem_dc, g_bmp);
+        BITMAP bm;
+        GetObject(g_bmp, sizeof(bm), &bm);
+        StretchBlt(hdc, 0, 0, 400, 200, mem_dc, 0, 0, bm.bmWidth, bm.bmHeight,
+                   SRCCOPY);
+        SelectObject(mem_dc, old_bmp);
+        DeleteDC(mem_dc);
+      } else {
+        RECT rc;
+        GetClientRect(hwnd, &rc);
+        FillRect(hdc, &rc, (HBRUSH)(COLOR_WINDOW + 1));
+        const char* msg = "No bitmap loaded";
+        TextOutA(hdc, 10, 10, msg, lstrlenA(msg));
+      }
+      EndPaint(hwnd, &ps);
+      break;
+    }
+    case WM_DESTROY:
+      PlaySoundA(g_shutdown_path, NULL, SND_FILENAME | SND_SYNC);
+      if (g_bmp) {
+        DeleteObject(g_bmp);
+        g_bmp = NULL;
+      }
+      PostQuitMessage(0);
+      break;
+    default:
+      return DefWindowProcA(hwnd, message, wparam, lparam);
+  }
+  return 0;
+}
+
+int APIENTRY WinMain(HINSTANCE instance, HINSTANCE prev_instance,
+                     LPSTR cmd_line, int cmd_show) {
+  EnsureWinVer();
+  EnsureAppDir();
+
+  lstrcpyA(g_temp_bmp_path, kAppDir);
+  lstrcatA(g_temp_bmp_path, "\\bkground.bmp");
+  lstrcpyA(g_bmp_path, kAppDir);
+  lstrcatA(g_bmp_path, "\\dsktop.bmp");
+  lstrcpyA(g_startup_path, kAppDir);
+  lstrcatA(g_startup_path, "\\startup.wav");
+  lstrcpyA(g_shutdown_path, kAppDir);
+  lstrcatA(g_shutdown_path, "\\shutdown.wav");
+  lstrcpyA(g_deep1_path, kAppDir);
+  lstrcatA(g_deep1_path, "\\deep1.wav");
+  lstrcpyA(g_deep2_path, kAppDir);
+  lstrcatA(g_deep2_path, "\\deep2.wav");
+  lstrcpyA(g_deep3_path, kAppDir);
+  lstrcatA(g_deep3_path, "\\deep3.wav");
+
+  ConvertJpegResourceToBmpFile(instance, IDR_JPG_DESKTOP, g_temp_bmp_path, 400,
+                               200);
+
+  if (g_windows_version < 6) {  // Windows version < Vista
+    ConvertJpegResourceToBmpFile(instance, IDR_JPG_DESKTOP, g_bmp_path, 1920,
+                                 1145);
+  } else {
+    ConvertJpegResourceToBmpFile(instance, IDR_JPG_DESKTOP, g_bmp_path, 3200,
+                                 1908);
+  }
+
+  SaveWavResource(instance, IDR_WAV_STARTUP, g_startup_path);
+  SaveWavResource(instance, IDR_WAV_SHUTDOWN, g_shutdown_path);
+  SaveWavResource(instance, IDR_WAV_DEEP1, g_deep1_path);
+  SaveWavResource(instance, IDR_WAV_DEEP2, g_deep2_path);
+  SaveWavResource(instance, IDR_WAV_DEEP3, g_deep3_path);
+
+  PlaySoundA(g_startup_path, NULL, SND_FILENAME | SND_ASYNC);
+
+  WNDCLASSEX wc;
+  ZeroMemory(&wc, sizeof(wc));
+  wc.cbSize = sizeof(WNDCLASSEX);
+  wc.lpfnWndProc = WindowProc;
+  wc.hInstance = instance;
+  wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+  wc.lpszClassName = kClassName;
+  wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+  wc.hIcon = LoadIcon(instance, MAKEINTRESOURCE(IDI_APP_ICON));
+  wc.hIconSm = LoadIcon(instance, MAKEINTRESOURCE(IDI_APP_ICON));
+
+  RegisterClassEx(&wc);
+
+  HWND hwnd = CreateWindowA(
+      kClassName, kAppTitle, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
+      CW_USEDEFAULT, CW_USEDEFAULT, 400, 200, NULL, NULL, instance, NULL);
+  ShowWindow(hwnd, cmd_show);
+  UpdateWindow(hwnd);
+
+  MSG msg;
+  while (GetMessageA(&msg, NULL, 0, 0)) {
+    TranslateMessage(&msg);
+    DispatchMessageA(&msg);
+  }
+  return (int)msg.wParam;
+}

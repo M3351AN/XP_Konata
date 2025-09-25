@@ -1,0 +1,30 @@
+//Microsoft Developer Studio generated resource script.
+//
+#include "resource.h"
+
+#ifdef _AFXRES_H_
+#include "afxres.h"
+#else
+#include <winres.h>
+#endif
+
+
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_CHS)
+#ifdef _WIN32
+LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
+#pragma code_page(936)
+#endif //_WIN32
+
+
+IDR_JPG_DESKTOP RCDATA "Resource\\dsktop.jpg"
+
+IDR_WAV_STARTUP   WAVE "Resource\\startup.wav"
+IDR_WAV_SHUTDOWN  WAVE "Resource\\shutdown.wav"
+IDR_WAV_DEEP1     WAVE "Resource\\deep1.wav"
+IDR_WAV_DEEP2     WAVE "Resource\\deep2.wav"
+IDR_WAV_DEEP3     WAVE "Resource\\deep3.wav"
+
+IDI_APP_ICON      ICON "favicon64.ico"
+
+#endif 

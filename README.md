@@ -4,21 +4,30 @@ A tool to set windows desktop background and system sounds as Izumi Konata
 
 ---
 ## What Is This
-This is a tool that automatically sets Windows system sound effects and desktop wallpaper to Izumi Konata. It has been tested on Windows XP and the latest Windows 11.
+This is a tool that automatically sets Windows system sound effects and desktop wallpaper to Izumi Konata. It has been tested on Windows 98 SE and the latest Windows 11.
 
-- XP_Konata.sln is solution for VS2022
-- XP_Konata.sln is solution for VS2005 & later
+- XP_Konata_VC6.dsw is workspace for VC6
+- XP_Konata_v141_xp.sln is solution for VS2017&later with v141_xp toolset
+## Differences from V143 Branch
+
+- V143 branch We try to use the latest v143 toolset to build, so we are very careful in using WinApi, and even need to exclude CRT dependency, so the function is not perfect.
+
+Almost rebased so
+
+- We no longer inline resource files in headers, so VC6 finally doesn't explode the stack and throw C1063.
+- We can now build a basic window program.
+- We now automatically back up the user's original settings during set, allowing users to reset.
+- Maybe we can try something more radical? Idk, but still not in modern C++...
 ## Features
 
-- With minimal CRT dependencies and other magic, you can compile programs that work on Windows XP on the latest VS2022 version.
-- It has been tested on Windows 11 24H2, Windows 10 22H2\Windows XP SP3. In theory, you can run it on all x86/64 architecture Windows from Windows XP SP3 to the latest Windows 11.（Not tested on systems older than Windows XP SP3）
-
+- VC6 version build has been tested on Windows 11 24H2, Windows 10 22H2, Windows XP SP3, Windows 98 SE. In theory, you can run it on all x86/64 architecture Windows from Windows 98 SE to the latest Windows 11.（Not tested on systems older than Windows 98 SE）
+- v141_xp version build has been tested on Windows 11 24H2, Windows 10 22H2, Windows XP SP3. In theory, you can run it on all x86/64 architecture Windows from Windows XP SP3 to the latest Windows 11.（Cant exec on systems older than Windows XP）
+- Initial compatibility with changes in boot sound behavior caused by Windows version changes (to be improved)
 ## KnownIssues
 
-- On Windows XP, since the wallpaper only supports BMP format by default, you need to manually click "Apply" in the settings to make it take effect correctly
-- On Windows Vista and later systems, the boot sound effect requires modifying imageres.dll and is not integrated into the current version.
-- On Windows 8 and later systems, Windows has removed the shutdown sound effect, so the shutdown sound effect customization will not work.
-
+- On Windows Vista and later systems, the boot sound effect requires modifying imageres.dll and is not integrated into the current version.We use the logon sound effect instead.
+- On Windows 8 and later systems, Windows has removed the shutdown/logon/logoff sound effect, so the shutdown sound effect customization will not work.
+- On very old computers, performance may be SIGNIFICANTLY degraded or settings may not be successful due to large image resolutions.
 ## License
 
 This project is licensed under [**TOSSRCU**](LICENSE).

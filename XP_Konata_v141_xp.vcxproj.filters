@@ -15,6 +15,11 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ResourceCompile Include="XP_Konata_VC6.rc">
+      <Filter>资源文件</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
     <ClCompile Include="pch.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
@@ -23,45 +28,14 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="deep1.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="deep2.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="deep3.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="dsktop.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="shutdown.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="startup.h">
+    <ClInclude Include="framework.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="pch.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="framework.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="helper.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="resource.h">
       <Filter>头文件</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <ResourceCompile Include="XP_Konata.rc">
-      <Filter>资源文件</Filter>
-    </ResourceCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <Image Include="favicon.ico">
-      <Filter>资源文件</Filter>
-    </Image>
   </ItemGroup>
 </Project>
