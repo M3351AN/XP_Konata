@@ -1,3 +1,4 @@
+﻿﻿// Copyright (c) 2025 渟雲. All rights reserved.
 #include "pch.h"
 
 #if _MSC_VER >= 1910
