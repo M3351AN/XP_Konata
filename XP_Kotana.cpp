@@ -146,9 +146,15 @@ void SetWallpaper(LPCTSTR path) {
                      (LPARAM)TEXT("Control Panel\\Desktop"), SMTO_ABORTIFHUNG,
                      1000, NULL);
   // Is too complex to refresh Active Desktop stuffs
-  ShellExecute(NULL, TEXT("open"), TEXT("rundll32.exe"),
-               TEXT("shell32.dll,Control_RunDLL desk.cpl,,0"), NULL,
-               SW_SHOWNORMAL);
+  OSVERSIONINFO vi = {0};
+  vi.dwOSVersionInfoSize = sizeof(vi);
+  GetVersionEx(&vi);
+
+  if (vi.dwMajorVersion < 6) {  // Windows version < Vista
+    ShellExecute(NULL, TEXT("open"), TEXT("rundll32.exe"),
+                 TEXT("shell32.dll,Control_RunDLL desk.cpl,,0"), NULL,
+                 SW_SHOWNORMAL);
+  }
 }
 
 void SetSystemSound(LPCTSTR startup_path, LPCTSTR shutdown_path,
