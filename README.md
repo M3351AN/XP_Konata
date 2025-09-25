@@ -1,5 +1,7 @@
 # XP_Konata
 A tool to set windows desktop background and system sounds as Izumi Konata
+<img width="446" height="98" alt="image" src="https://github.com/user-attachments/assets/12ca5791-6d11-41df-8ca0-a9bc8b140416" />
+
 ---
 ## What Is This
 This is a tool that automatically sets Windows system sound effects and desktop wallpaper to Izumi Konata. It has been tested on Windows XP and the latest Windows 11.
