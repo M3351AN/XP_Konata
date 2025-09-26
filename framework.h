@@ -7,6 +7,7 @@
 #include <mmsystem.h>
 #include <ole2.h>
 #include <olectl.h>
+#include <commctrl.h>
 
 #include <string>
 #include <iostream>

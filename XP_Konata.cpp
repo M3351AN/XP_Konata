@@ -10,10 +10,14 @@
 #ifndef REPLACEFILE_WRITE_THROUGH
 #define REPLACEFILE_WRITE_THROUGH 0x00000002
 #endif
+#ifndef ICC_STANDARD_CLASSES
+#define ICC_STANDARD_CLASSES 0x00004000
+#endif
 
 #pragma comment(lib, "winmm.lib")
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "oleaut32.lib")
+#pragma comment(lib, "comctl32.lib")
 
 static const char kAppTitle[] = "XP Konata";
 static const char kClassName[] = "KonataWnd";
@@ -599,12 +603,12 @@ static void SetSoundEvent(const char* event_name, const char* wav_path) {
 static void ApplySystemSounds(const char* startup, const char* shutdown,
                               const char* deep1, const char* deep2,
                               const char* deep3) {
-  if (g_windows_version < 6) {
+  if (g_windows_version < 6) {  // older than Vista
     SetSoundEvent("SystemStart", startup);
     SetSoundEvent("SystemExit", shutdown);
     SetSoundEvent("WindowsLogon", "");
     SetSoundEvent("WindowsLogoff", "");
-  } else if (g_windows_version < 6.2) {
+  } else if (g_windows_version < 6.2) {  // Vista~Before Windows 8
     SetSoundEvent("SystemStart", "");
     SetSoundEvent("SystemExit", "");
     SetSoundEvent("WindowsLogon", startup);
@@ -621,7 +625,7 @@ static void ApplySystemSounds(const char* startup, const char* shutdown,
                      sizeof(value));
       RegCloseKey(key);
     }
-  } else {
+  } else { // Windows 8 & later
     SetSoundEvent("SystemStart", "");
     SetSoundEvent("SystemExit", "");
     SetSoundEvent("WindowsLogon", "");
@@ -683,7 +687,7 @@ static void SaveBackup() {
       WritePrivateProfileStringA("Sounds", events[i], "", kBackupIni);
     }
   }
-  if (g_windows_version >= 6.2) {
+  if (g_windows_version >= 6.2) {  // Windows 8 & later
     BackupImageresDll();
     WritePrivateProfileStringA("System", "ImageresBackup", "1", kBackupIni);
   }
@@ -864,10 +868,39 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam,
     case WM_CREATE: {
       g_bmp = (HBITMAP)LoadImageA(NULL, g_temp_bmp_path, IMAGE_BITMAP, 0, 0,
                                   LR_LOADFROMFILE);
-      CreateWindowA("BUTTON", "set", WS_CHILD | WS_VISIBLE, 50, 120, 100, 30,
-                    hwnd, (HMENU)IDC_BTN_SET, GetModuleHandle(NULL), NULL);
-      CreateWindowA("BUTTON", "reset", WS_CHILD | WS_VISIBLE, 250, 120, 100, 30,
-                    hwnd, (HMENU)IDC_BTN_RESET, GetModuleHandle(NULL), NULL);
+      DWORD buttonStyle = WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | BS_TEXT |
+                          BS_CENTER | BS_VCENTER;
+      if (g_windows_version >= 5.0f) {  // Windows 2000 & later
+        buttonStyle |= BS_FLAT;
+      }
+      CreateWindowA("BUTTON", "set", buttonStyle, 50, 120, 100, 30, hwnd,
+                    (HMENU)IDC_BTN_SET, GetModuleHandle(NULL), NULL);
+
+      CreateWindowA("BUTTON", "reset", buttonStyle, 250, 120, 100, 30, hwnd,
+                    (HMENU)IDC_BTN_RESET, GetModuleHandle(NULL), NULL);
+
+      HFONT hFont = NULL;
+      // MS Shell Dlg Font
+      if (g_windows_version >= 5.0f) {
+        NONCLIENTMETRICSA ncm;
+        ncm.cbSize = sizeof(NONCLIENTMETRICSA);
+        if (SystemParametersInfoA(SPI_GETNONCLIENTMETRICS,
+                                  sizeof(NONCLIENTMETRICSA), &ncm, 0)) {
+          hFont = CreateFontIndirectA(&ncm.lfMessageFont);
+        }
+      }
+
+      // fallback
+      if (!hFont) {
+        hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+      }
+
+      HWND hBtnSet = GetDlgItem(hwnd, IDC_BTN_SET);
+      HWND hBtnReset = GetDlgItem(hwnd, IDC_BTN_RESET);
+
+      if (hBtnSet) SendMessage(hBtnSet, WM_SETFONT, (WPARAM)hFont, TRUE);
+      if (hBtnReset) SendMessage(hBtnReset, WM_SETFONT, (WPARAM)hFont, TRUE);
+
       DeleteFileA(g_temp_bmp_path);
 
       char buf[128];
@@ -936,6 +969,11 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE prev_instance,
   EnsureWinVer();
   EnsureAppDir();
 
+  INITCOMMONCONTROLSEX icex;
+  icex.dwSize = sizeof(INITCOMMONCONTROLSEX);
+  icex.dwICC = ICC_STANDARD_CLASSES | ICC_WIN95_CLASSES;
+  InitCommonControlsEx(&icex);
+
   lstrcpyA(g_temp_bmp_path, kAppDir);
   lstrcatA(g_temp_bmp_path, "\\bkground.bmp");
   lstrcpyA(g_jpg_path, kAppDir);
@@ -960,7 +998,7 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE prev_instance,
   }
 
   ConvertJpegFileToBmpFile(g_jpg_path, g_temp_bmp_path, 400, 200);
-  if (g_windows_version < 6) {
+  if (g_windows_version < 6) {  // before Windows Vista
     ConvertJpegFileToBmpFile(g_jpg_path, g_bmp_path, 1920, 1145);
   } else {
     ConvertJpegFileToBmpFile(g_jpg_path, g_bmp_path, 3200, 1908);
