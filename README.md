@@ -21,7 +21,7 @@ Almost rebased so
 - Maybe we can try something more radical? Idk, but still not in modern C++...
 ## Features
 
-- VC6 version build has been tested on Windows 11 24H2, Windows 10 22H2, Windows XP SP3, Windows 98 SE. In theory, you can run it on all x86/64 architecture Windows from Windows 98 SE to the latest Windows 11.（Not tested on systems older than Windows 98 SE）
+- VC6 version build has been tested on Windows 11 24H2, Windows 10 22H2, Windows XP SP3, Windows 98 SE, Windows 95. In theory, you can run it on all x86/64 architecture Windows from Windows 95 to the latest Windows 11.（Not tested on systems older than Windows 95）
 - v141_xp version build has been tested on Windows 11 24H2, Windows 10 22H2, Windows XP SP3. In theory, you can run it on all x86/64 architecture Windows from Windows XP SP3 to the latest Windows 11.（Cant exec on systems older than Windows XP）
 - Initial compatibility with changes in boot sound behavior caused by Windows version changes (to be improved)
 ## KnownIssues
